@@ -504,6 +504,8 @@ class ClawBot(PushChannel):
             time.sleep(self.flush_interval)
             try:
                 self.flush()
+                with self._lock:
+                    self._check_all_quotas()
             except Exception as e:
                 log.error(f"【推送_{self.name}】后台补发异常：{e}")
 
@@ -524,63 +526,39 @@ class ClawBot(PushChannel):
                 titles.append(t)
         return titles
 
-    def _maybe_alert(self, tgt, left):
-        """额度不足且有积压时告警；自己发不出去就换有额度的账号代发"""
-        if left > 1 or not self.outbox:
-            return
-        titles = self._queued_titles(tgt)
-        if not titles:
-            return
-
+    def _quota_warn(self, tgt, left):
+        """额度只剩 1 条时主动提醒（不论队列是否有积压）；每轮只提醒一次"""
+        if left != 1:
+            return  # 0 条发不出去了，>1 还够用
         last_in = self._last_inbound_ms(tgt)
         state = self._load_json(ALERT, {})
         rec = state.get(tgt) or {}
         if rec.get("last_in") == last_in:
             return  # 本轮已提醒过
 
-        body = "\n".join("· " + t for t in titles[:6])
-        if len(titles) > 6:
-            body += "\n· 等共 %d 条" % len(titles)
+        titles = self._queued_titles(tgt)
+        if titles:
+            body = "\n".join("· " + t for t in titles[:6])
+            if len(titles) > 6:
+                body += "\n· 等共 %d 条" % len(titles)
+            msg = ("⏳ %d 条番剧在排队：\n%s\n配额仅剩 1/%d，回复任意消息即可立即补发"
+                   % (len(titles), body, self.quota_max))
+        else:
+            msg = ("⚠️ 配额仅剩 1/%d：下一条番剧推送将无法发出。\n"
+                   "回复任意消息即可重置额度。" % self.quota_max)
 
-        ok = False
-        if left >= 1:
-            msg = ("⏳ 有 %d 条番剧推送在排队：\n%s\n配额仅剩 %d/%d，回复任意消息即可立即补发"
-                   % (len(titles), body, left, self.quota_max))
-            ok, out = self._send(msg, target=tgt)
-            if not ok:
-                log.info(f"【推送_{self.name}】{self._label(tgt)} 告警发送失败：{out[:70]}")
-
-        if not ok:
-            # 自己没额度了 → 借其它账号代发，避免"被限的那个发不出消息"
-            for other in (self.targets or []):
-                if other == tgt:
-                    continue
-                if self._quota_left(other) < 1:
-                    continue
-                relay = ("⚠️ %s 的推送额度已用尽（0/%d），有 %d 条番剧在排队：\n%s\n"
-                         "用 %s 回一句话，即可恢复并自动补发"
-                         % (self._label(tgt), self.quota_max, len(titles), body, self._label(tgt)))
-                ok2, out2 = self._send(relay, target=other)
-                if ok2:
-                    ok = True
-                    log.info(f"【推送_{self.name}】{self._label(tgt)} 额度耗尽，已由 {self._label(other)} 代发告警")
-                    break
-                log.info(f"【推送_{self.name}】代发失败（{self._label(other)}）：{out2[:70]}")
-
+        ok, out = self._send(msg, target=tgt)
         if ok:
-            rec = {"last_in": last_in, "ts": int(time.time())}
-            state[tgt] = rec
+            state[tgt] = {"last_in": last_in, "ts": int(time.time())}
             self._save_json(ALERT, state)
+            log.info(f"【推送_{self.name}】{self._label(tgt)} 配额仅剩 1 条，已提醒")
+        else:
+            log.info(f"【推送_{self.name}】{self._label(tgt)} 配额提醒发送失败：{out[:70]}")
 
-    def _alert_blocked(self):
-        """对所有仍有积压且额度不足的 target 逐个告警"""
-        targets_in_queue = []
-        for it in self.outbox:
-            t = it.get("target") or self.target
-            if t not in targets_in_queue:
-                targets_in_queue.append(t)
-        for t in targets_in_queue:
-            self._maybe_alert(t, self._quota_left(t))
+    def _check_all_quotas(self):
+        """每轮检查所有 target 的余额（有积压或没积压都检查）"""
+        for t in (self.targets or [self.target]):
+            self._quota_warn(t, self._quota_left(t))
 
     def flush(self):
         """把队列里的消息尽量发出去；额度用完就停，下次再试"""
@@ -611,7 +589,7 @@ class ClawBot(PushChannel):
                 left_now = self._quota_left(self.outbox[0].get("target") or self.target)
                 log.info(f"【推送_{self.name}】配额不足（剩 {left_now} 条，单条需 {_need(self.outbox[0])} 条），"
                          f"队列保留 {len(self.outbox)} 条，等待回复重置")
-                self._alert_blocked()
+                self._check_all_quotas()
                 return
             changed = False
             remaining = []
@@ -694,8 +672,7 @@ class ClawBot(PushChannel):
             if changed:
                 self._save_json(OUTBOX, self.outbox)
                 self._save_json(SEEN, self.seen)
-            if self.outbox:
-                self._alert_blocked()
+            self._check_all_quotas()
 
     def _rerender(self, item):
         """卡片图丢失时按存档参数重新渲染"""
