@@ -125,6 +125,10 @@ class ClawBot(PushChannel):
         self.fail_open = bool(config.get("fail_open", True))
         self.flush_interval = int(config.get("flush_interval", 90))
         self.quota_max = int(config.get("quota_max", 10))
+        # 推送必须给对话让路：留 N 条额度给 AI 回复（回复不可恢复，推送可排队）
+        self.reserve = max(0, int(config.get("quota_reserve", 2)))
+        # 对话活动停止多少秒后才允许推送（一轮对话内的活动间隔可达 20 秒）
+        self.chat_idle = max(0, int(config.get("chat_idle_seconds", 45)))
         self.quota_window = int(config.get("quota_window_hours", 24)) * 3600
         self._lock = threading.Lock()
         self._fail_streak = 0
@@ -357,6 +361,16 @@ class ClawBot(PushChannel):
         return True, None
 
     # ---------- 配额 ----------
+    def _agent_busy(self):
+        """最近 chat_idle 秒内有对话活动（入站 / 模型调用 / agent 直发）→ 正在处理一轮对话"""
+        if not self.chat_idle:
+            return False
+        try:
+            last = sentlog.activity_ms()
+        except Exception:
+            return False
+        return last > 0 and (time.time() * 1000 - last) < self.chat_idle * 1000
+
     def _last_inbound_ms(self, tgt):
         """用户最后一条消息的时间（毫秒），决定额度轮次起点"""
         try:
@@ -507,8 +521,15 @@ class ClawBot(PushChannel):
         只在「确实有内容要发、但额度不够」时才消耗这条额度，
         不会因为定时检查而白白烧掉。每轮每个微信号只提醒一次。
         """
-        if left != 1 or not self.outbox:
+        if not self.outbox:
             return
+        need = 2 if self.send_link else 1
+        if left >= need + self.reserve:
+            return          # 额度还够发，不用打扰
+        if left < 1:
+            return          # 发不出去，告警也发不了
+        if self._agent_busy():
+            return          # 对话进行中，不抢额度
 
         titles = self._queued_titles(tgt)
         if not titles:
@@ -524,10 +545,10 @@ class ClawBot(PushChannel):
         if len(titles) > 6:
             body += "\n· 等共 %d 条" % len(titles)
 
-        msg = ("⚠️ 配额已用尽（最后 1 条已用在这条提醒上）\n"
+        msg = ("⚠️ 推送被额度卡住：剩 %d 条，单条需 %d 条，保留 %d 条给对话\n"
                "有 %d 条番剧在排队：\n%s\n"
                "回复任意消息，即可恢复额度并自动补发"
-               % (len(titles), body))
+               % (left, need, self.reserve, len(titles), body))
 
         ok, out = self._send(msg, target=tgt)
         if ok:
@@ -553,6 +574,11 @@ class ClawBot(PushChannel):
         with self._lock:
             if not self.outbox:
                 return
+            if self._agent_busy():
+                if time.time() - getattr(self, "_busy_log_ts", 0) > 600:
+                    self._busy_log_ts = time.time()
+                    log.info(f"【推送_{self.name}】对话进行中，{len(self.outbox)} 条推送暂缓")
+                return
             if not self._session_ok(self.outbox[0].get("target") or self.target if self.outbox else None):
                 if time.time() - getattr(self, "_dead_log_ts", 0) > 1800:
                     self._dead_log_ts = time.time()
@@ -566,7 +592,7 @@ class ClawBot(PushChannel):
                 link = x.get("link") if (self.send_link and not x.get("link_sent")) else None
                 return 1 + (1 if link else 0)
 
-            if not any(self._quota_left(i.get("target") or self.target) >= _need(i)
+            if not any(self._quota_left(i.get("target") or self.target) >= _need(i) + self.reserve
                        for i in self.outbox):
                 left_now = self._quota_left(self.outbox[0].get("target") or self.target)
                 log.info(f"【推送_{self.name}】配额不足（剩 {left_now} 条，单条需 {_need(self.outbox[0])} 条），"
@@ -580,7 +606,7 @@ class ClawBot(PushChannel):
                 # 配额逐条检查：不够发完整一条（卡片+链接）就整条保留，绝不发半条
                 need = _need(item)
                 left = self._quota_left(tgt)
-                if left < need:
+                if left < need + self.reserve:
                     remaining.append(item)
                     log.info(f"【推送_{self.name}】配额 {left} < 需要 {need}，"
                              f"整条排队：{item.get('title', '')[:20]}")

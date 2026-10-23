@@ -201,6 +201,10 @@ push_channel:
   flush_interval: 90
   quota_max: 10
   quota_window_hours: 48
+  # 推送给对话让路：留 2 条额度给 AI 回复（回复丢了不可恢复，推送可排队补发）
+  quota_reserve: 2
+  # 对话活动停止多少秒后才允许推送（一轮对话内的活动间隔最长约 20 秒）
+  chat_idle_seconds: 45
   targets:
   - <微信userId_A>
   - <微信userId_B>
