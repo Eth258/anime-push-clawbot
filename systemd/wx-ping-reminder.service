@@ -1,0 +1,6 @@
+[Unit]
+Description=Weixin keepalive reminder
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aio-dynamic-push/.venv/bin/python /root/wx_ping_reminder.py

@@ -1,0 +1,206 @@
+﻿common:
+  proxy_pool:
+    enable: false
+    proxy_pool_url: http://ip:port
+  push_channel:
+    send_test_msg_when_start: false
+query_task:
+- name: 番剧监控_示例UP
+  enable: true
+  type: bilibili
+  intervals_second: 600
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_个人微信ClawBot
+  enable_dynamic_check: true
+  enable_living_check: false
+  uid_list:
+  - <UP的UID_1>
+  - <UP的UID_2>
+  skip_forward: true
+  cookie: SESSDATA=<你的SESSDATA>; bili_jct=<你的bili_jct>; buvid3=<你的buvid3>; buvid4=<你的buvid4>;
+    DedeUserID=<你的UID>
+  payload: ''
+- name: 任务_weibo
+  enable: false
+  type: weibo
+  intervals_second: 60
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_企业微信应用
+  - 推送通道_钉钉机器人
+  enable_dynamic_check: true
+  uid_list:
+  - 7198559139
+  - 1765893783
+  cookie: SESSDATA=<你的SESSDATA>; bili_jct=<你的bili_jct>; buvid3=<你的buvid3>; buvid4=<你的buvid4>;
+    DedeUserID=<你的UID>
+- name: 任务_xhs
+  enable: false
+  type: xhs
+  intervals_second: 300
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_企业微信应用
+  - 推送通道_钉钉机器人
+  enable_dynamic_check: true
+  profile_id_list:
+  - 52d8c541b4c4d60e6c867480
+  - 5bf64788aa4b0a000114b879
+  cookie: SESSDATA=<你的SESSDATA>; bili_jct=<你的bili_jct>; buvid3=<你的buvid3>; buvid4=<你的buvid4>;
+    DedeUserID=<你的UID>
+- name: 任务_douyin
+  enable: false
+  type: douyin
+  intervals_second: 30
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_企业微信应用
+  - 推送通道_钉钉机器人
+  enable_dynamic_check: false
+  signature_server_url: http://ip:port
+  username_list:
+  - <抖音用户名_1>
+  - <抖音用户名_2>
+  sec_uid_list:
+  - <抖音sec_uid>
+  - <抖音sec_uid>
+  enable_living_check: true
+  douyin_id_list:
+  - <抖音号_1>
+  - <抖音号_2>
+- name: 任务_douyu
+  enable: false
+  type: douyu
+  intervals_second: 300
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_企业微信应用
+  - 推送通道_钉钉机器人
+  enable_living_check: true
+  room_id_list:
+  - 307876
+  - 12306
+- name: 任务_huya
+  enable: false
+  type: huya
+  intervals_second: 300
+  begin_time: 00:00
+  end_time: '23:59'
+  target_push_name_list:
+  - 推送通道_企业微信应用
+  - 推送通道_钉钉机器人
+  enable_living_check: true
+  room_id_list:
+  - lpl
+  - '880201'
+push_channel:
+- name: 推送通道_Server酱_Turbo
+  enable: false
+  type: serverChan_turbo
+  send_key: null
+- name: 推送通道_Server酱_3
+  enable: false
+  type: serverChan_3
+  send_key: null
+  uid: null
+  tags: null
+- name: 推送通道_企业微信应用
+  enable: false
+  type: wecom_apps
+  corp_id: null
+  agent_id: null
+  corp_secret: null
+- name: 推送通道_企业微信消息推送(原"群机器人")
+  enable: false
+  type: wecom_bot
+  key: null
+- name: 推送通道_钉钉机器人
+  enable: false
+  type: dingtalk_bot
+  access_token: null
+- name: 推送通道_飞书自建应用
+  enable: false
+  type: feishu_apps
+  app_id: null
+  app_secret: null
+  receive_id_type: null
+  receive_id: null
+- name: 推送通道_飞书机器人
+  enable: false
+  type: feishu_bot
+  webhook_key: null
+- name: 推送通道_Telegram机器人
+  enable: false
+  type: telegram_bot
+  api_token: null
+  chat_id: null
+- name: 推送通道_QQ机器人
+  enable: false
+  type: qq_bot
+  base_url: https://api.sgroup.qq.com
+  app_id: null
+  app_secret: null
+  push_target_list:
+  - guild_name: 频道1
+    channel_name_list:
+    - 子频道11
+    - 子频道12
+  - guild_name: 频道2
+    channel_name_list:
+    - 子频道21
+    - 子频道22
+- name: 推送通道_NapCatQQ
+  enable: false
+  type: napcat_qq
+  api_url: http://localhost:3000
+  token: null
+  user_id: null
+  group_id: null
+  at_qq: all
+- name: 推送通道_Bark
+  enable: false
+  type: bark
+  server_url: https://api.day.app
+  key: null
+- name: 推送通道_Gotify
+  enable: false
+  type: gotify
+  web_server_url: null
+- name: 推送通道_Webhook
+  enable: false
+  type: webhook
+  webhook_url: https://xxx.com?title={{title}}&content={{content}}&jump_url={{jump_url}}&pic_url={{pic_url}}
+  request_method: GET
+- name: 推送通道_Email
+  enable: false
+  type: email
+  smtp_host: null
+  smtp_port: null
+  smtp_ssl: true
+  smtp_tls: false
+  sender_email: null
+  sender_password: null
+  receiver_email: null
+- name: 推送通道_个人微信ClawBot
+  enable: true
+  type: clawbot
+  target: <你的微信userId>
+  deepseek_key: sk-<你的DeepSeekKey>
+  model: deepseek-flash
+  fail_open: true
+  render_card: true
+  push_image_only: true
+  send_link: true
+  card_style: bleed
+  flush_interval: 90
+  quota_max: 10
+  quota_window_hours: 48
+  targets:
+  - <微信userId_A>
+  - <微信userId_B>

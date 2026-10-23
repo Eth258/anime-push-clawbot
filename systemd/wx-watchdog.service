@@ -1,0 +1,7 @@
+[Unit]
+Description=WeChat channel watchdog
+After=openclaw-gateway.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/.nvm/versions/node/v24.22.1/bin/node /root/wx_watchdog.js

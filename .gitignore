@@ -1,0 +1,34 @@
+# 运行数据与状态（含隐私，不入库）
+data/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+state/
+anime-push-state-*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 真实配置与凭证
+config.yml
+accounts/
+*.context-tokens.json
+*.sync.json
+openclaw.json
+.env
+
+# 放送表缓存
+code/anime_push/bd.json
+code/anime_push/covers/
+code/anime_push/eps_cache/
+code/anime_push/mikan_cache/
+code/anime_push/meta_cache.json
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
