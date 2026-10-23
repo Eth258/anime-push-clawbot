@@ -18,6 +18,7 @@ except Exception:
 from common.logger import log
 from . import PushChannel
 from .qr import qr_content_for, code_text_for
+from . import sentlog
 
 def _first_existing(*cands):
     for c in cands:
@@ -370,42 +371,18 @@ class ClawBot(PushChannel):
             return 0
 
     def _count_outbound_since(self, since_ms, tgt):
-        """统计 since_ms 之后发给该 target 的成功消息数（文本 + 图片），数据来自日志"""
-        import datetime as _dt
-        total = 0
-        seen_since = False
-        for delta in (1, 0):
-            day = _dt.datetime.now() - _dt.timedelta(days=delta)
-            path = "/tmp/openclaw/openclaw-%s.log" % day.strftime("%Y-%m-%d")
-            try:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    for line in f:
-                        # 三类「消息起始行」，每条消息恰好出现一次：
-                        #   outbound: to=X ...             → agent 发的文本（带 context）
-                        #   sendMessageWeixin: contextToken missing for to=X → CLI 发的文本
-                        #   sendImageMessageWeixin: to=X filekey=...     → 图片（两条路径都走这里）
-                        is_text_agent = ("outbound: to=" + str(tgt)) in line and "textLen=" in line
-                        is_text_cli = ("sendMessageWeixin: contextToken missing for to=" + str(tgt)) in line
-                        is_image = ("sendImageMessageWeixin: to=" + str(tgt)) in line and "filekey=" in line
-                        if not (is_text_agent or is_text_cli or is_image):
-                            continue
-                        try:
-                            j = json.loads(line)
-                            ts = j["_meta"]["date"]
-                        except Exception:
-                            continue
-                        try:
-                            ms = int(_dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
-                        except Exception:
-                            continue
-                        if ms > since_ms:
-                            total += 1
-                            seen_since = True
-            except FileNotFoundError:
-                continue
-            except Exception:
-                continue
-        return total, seen_since
+        """统计 since_ms 之后发给该 target 的消息数。
+
+        数据来自 SQLite 发送记录（sentlog），由网关日志增量归集：
+        只读新增字节，日志轮转/清理都不影响已归集的历史。
+        返回 (条数, 是否可用)；不可用时由调用方退回消息库。
+        """
+        try:
+            sentlog.ingest()
+            return sentlog.count_used(tgt, int(since_ms)), True
+        except Exception as e:
+            log.error(f"【推送_{self.name}】读取发送记录失败：{e}")
+            return 0, False
 
     def _quota_used(self, tgt):
         """真实用量：日志里的成功发送数；日志不可用时退回消息库"""

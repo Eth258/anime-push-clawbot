@@ -104,6 +104,31 @@
 | `wx-session-probe.timer` | 30 分钟 | 只读探测微信会话健康，写 `/var/log/wx_session.log` |
 | `wx-ping-reminder.timer` | 20 分钟 | 24 小时到期前，在 08:00–12:00 / 14:00–21:30 提醒回话 |
 
+### 运行状态
+
+| 路径 | 内容 | 形式 |
+|---|---|---|
+| `data/sent.sqlite` | 发送记录（配额统计的唯一数据源） | SQLite |
+| `data/outbox.json` | 待发队列 | JSON |
+| `data/anime_seen.json` | 已推送去重 | JSON |
+| `data/title_pairs.json` | 跨 UP 同名判定缓存 | JSON |
+| `data/quota_alert.json` | 告警去重（按 target） | JSON |
+
+**为什么配额用 SQLite：** 额度计算依赖「bot 已发多少条」，其中包含 agent 回复与 cron 任务发出的消息，这些只有网关日志里才有。
+`sentlog.py` 按文件位点增量归集日志到 `sent` 表，之后再查库即可：
+
+```
+日志按天滚动、位于 /tmp（重启或清理即丢）→ 位点持久化，只读新增字节
+每天 1~5 MB 全文扫描 → 一次增量读，之后只查索引
+跨天会话（昨晚聊过、今天还用额度）→ 历史行留在库里，不受滚动影响
+```
+
+表结构只有一列语义：`sent(target, kind, origin, ts)`，可直接 SQL 审计：
+
+```bash
+cd /opt/aio-dynamic-push && ./.venv/bin/python -m push_channel.sentlog stats
+```
+
 ### 番剧信息源
 
 番剧数据（放送表、译名、集数、封面、完结判定）来自以下几个公开数据源，不依赖 B站 的番剧库：
