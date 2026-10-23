@@ -32,3 +32,7 @@ code/anime_push/meta_cache.json
 .vscode/
 .idea/
 .DS_Store
+
+# 测试代码不入库（本地保留）
+tests/
+tests-local/
