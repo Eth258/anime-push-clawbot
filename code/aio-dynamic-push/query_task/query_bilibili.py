@@ -123,7 +123,7 @@ class QueryBilibili(QueryTask):
             else:
                 data = result["data"]
                 if "items" not in data or data["items"] is None or len(data["items"]) == 0:
-                    super().handle_for_result_null(-1, uid, "B站", uid)
+                    log.warning(f"【B站-查询动态状态-{self.name}】【{uid}】接口返回空，跳过本轮（不建基线）")
                     return
 
                 items = data["items"]
@@ -134,7 +134,8 @@ class QueryBilibili(QueryTask):
 
                 # 跳过置顶后再判断一下，防止越界
                 if len(data["items"]) == 0:
-                    super().handle_for_result_null(-1, uid, "B站", uid)
+                    # 不创建带哨兵的队列：留空让下次成功请求时的「基线重建」生效
+                    log.warning(f"【B站-查询动态状态-{self.name}】【{uid}】动态列表为空，跳过本轮（不建立基线）")
                     return
 
                 item = items[0]
@@ -158,6 +159,17 @@ class QueryBilibili(QueryTask):
                         if index < len(items):
                             self.dynamic_dict[uid].appendleft(items[index]["id_str"])
                     log.info(f"【B站-查询动态状态-{self.name}】【{uname}】动态初始化：{self.dynamic_dict[uid]}")
+                    return
+
+                # 基线无效（首次运行，或上次接口返回空列表被塞了哨兵 -1）时，
+                # 用当前列表重建基线，本轮不推送；否则会把整页历史动态当成新动态重推。
+                dq = self.dynamic_dict.get(uid)
+                if dq is None or not dq or (-1 in dq) or ("-1" in dq):
+                    self.dynamic_dict[uid] = deque(maxlen=self.len_of_deque)
+                    for it in items[:self.len_of_deque]:
+                        self.dynamic_dict[uid].appendleft(it["id_str"])
+                    log.info(f"【B站-查询动态状态-{self.name}】【{uname}】基线重建："
+                             f"{len(self.dynamic_dict[uid])} 条（本轮不推送）")
                     return
 
                 # 一次轮询可能有多条新动态，全部处理（最多 5 条，防止积压刷屏）
@@ -278,7 +290,7 @@ class QueryBilibili(QueryTask):
             else:
                 data = result["data"]
                 if 'cards' not in data or data["cards"] is None or len(data["cards"]) == 0:
-                    super().handle_for_result_null(-1, uid, "B站", uid)
+                    log.warning(f"【B站-查询动态状态-{self.name}】【{uid}】接口返回空，跳过本轮（不建基线）")
                     return
 
                 item = data["cards"][0]
