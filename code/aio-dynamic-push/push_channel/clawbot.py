@@ -504,8 +504,6 @@ class ClawBot(PushChannel):
             time.sleep(self.flush_interval)
             try:
                 self.flush()
-                with self._lock:
-                    self._check_all_quotas()
             except Exception as e:
                 log.error(f"【推送_{self.name}】后台补发异常：{e}")
 
@@ -527,31 +525,38 @@ class ClawBot(PushChannel):
         return titles
 
     def _quota_warn(self, tgt, left):
-        """额度只剩 1 条时主动提醒（不论队列是否有积压）；每轮只提醒一次"""
-        if left != 1:
-            return  # 0 条发不出去了，>1 还够用
+        """额度只剩最后 1 条时提醒。
+
+        只在「确实有内容要发、但额度不够」时才消耗这条额度，
+        不会因为定时检查而白白烧掉。每轮每个微信号只提醒一次。
+        """
+        if left != 1 or not self.outbox:
+            return
+
+        titles = self._queued_titles(tgt)
+        if not titles:
+            return  # 没有待发内容，保留这最后一条额度
+
         last_in = self._last_inbound_ms(tgt)
         state = self._load_json(ALERT, {})
         rec = state.get(tgt) or {}
         if rec.get("last_in") == last_in:
             return  # 本轮已提醒过
 
-        titles = self._queued_titles(tgt)
-        if titles:
-            body = "\n".join("· " + t for t in titles[:6])
-            if len(titles) > 6:
-                body += "\n· 等共 %d 条" % len(titles)
-            msg = ("⏳ %d 条番剧在排队：\n%s\n配额仅剩 1/%d，回复任意消息即可立即补发"
-                   % (len(titles), body, self.quota_max))
-        else:
-            msg = ("⚠️ 配额仅剩 1/%d：下一条番剧推送将无法发出。\n"
-                   "回复任意消息即可重置额度。" % self.quota_max)
+        body = "\n".join("· " + t for t in titles[:6])
+        if len(titles) > 6:
+            body += "\n· 等共 %d 条" % len(titles)
+
+        msg = ("⚠️ 配额已用尽（最后 1 条已用在这条提醒上）\n"
+               "有 %d 条番剧在排队：\n%s\n"
+               "回复任意消息，即可恢复额度并自动补发"
+               % (len(titles), body))
 
         ok, out = self._send(msg, target=tgt)
         if ok:
             state[tgt] = {"last_in": last_in, "ts": int(time.time())}
             self._save_json(ALERT, state)
-            log.info(f"【推送_{self.name}】{self._label(tgt)} 配额仅剩 1 条，已提醒")
+            log.info(f"【推送_{self.name}】{self._label(tgt)} 配额见底，已用最后 1 条发出提醒")
         else:
             log.info(f"【推送_{self.name}】{self._label(tgt)} 配额提醒发送失败：{out[:70]}")
 
